@@ -19,37 +19,44 @@ namespace ImageDecoder
             if (args.Length == 0)
             {
                 Console.WriteLine("Usage: ImageDecoder <image_file>");
+                //Console.WriteLine("   or: ImageDecoder -e <raw_file>");
                 return 0;
             }
-            string fileName = args[0];
+            string inputFileName = args[0], outputFileName = null;
             try
             {
-                Size size;
-                RawFormat format;
-                byte[] bytes;
-                using (var bmp = (Bitmap)Image.FromFile(fileName))
-                {
-                    switch (bmp.PixelFormat)
-                    {
-                        case PixelFormat.Format8bppIndexed:
-                            format = RawFormat.Gray;
-                            break;
-                        case PixelFormat.Format24bppRgb:
-                            format = RawFormat.RGB;
-                            break;
-                        default:
-                            throw new FormatException($"File {fileName} has unknown format");
-                    }
-                    bytes = Decode(bmp, format, out size);
-                }
-                SaveBitmap(fileName, format, size, bytes);
+                outputFileName = DecodeFile(inputFileName);
             }
             catch (Exception e)
             {
                 Console.Error.WriteLine(e);
                 return 1;
             }
+            Console.WriteLine($"Decoded {inputFileName} into {outputFileName} successfully.");
             return 0;
+        }
+
+        static string DecodeFile(string fileName)
+        {
+            Size size;
+            RawFormat format;
+            byte[] bytes;
+            using (var bmp = (Bitmap)Image.FromFile(fileName))
+            {
+                switch (bmp.PixelFormat)
+                {
+                    case PixelFormat.Format8bppIndexed:
+                        format = RawFormat.Gray;
+                        break;
+                    case PixelFormat.Format24bppRgb:
+                        format = RawFormat.RGB;
+                        break;
+                    default:
+                        throw new FormatException($"File {fileName} has unknown format");
+                }
+                bytes = Decode(bmp, format, out size);
+            }
+            return SaveBitmap(fileName, format, size, bytes);
         }
 
         static byte[] Decode(Bitmap bmp, RawFormat format, out Size size)
@@ -75,10 +82,11 @@ namespace ImageDecoder
             return data;
         }
 
-        static void SaveBitmap(string origName, RawFormat format, Size size, byte[] data)
+        static string SaveBitmap(string origName, RawFormat format, Size size, byte[] data)
         {
             string rawName = Path.ChangeExtension(origName, $"{format}-{size.Width}x{size.Height}.raw");
             File.WriteAllBytes(rawName, data);
+            return rawName;
         }
     }
 }
