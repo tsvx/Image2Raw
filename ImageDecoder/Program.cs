@@ -8,7 +8,7 @@ using System.Runtime.InteropServices;
 using System.Text;
 using System.Threading.Tasks;
 
-namespace JpegDecoder
+namespace ImageDecoder
 {
     enum RawFormat { Undefined, Gray = 1, RGB = 3}; // Hack: item ordinal means bytes per pixel.
 
