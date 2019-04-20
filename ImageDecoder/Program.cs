@@ -11,7 +11,7 @@ using System.Threading.Tasks;
 
 namespace ImageDecoder
 {
-    enum RawFormat { Undefined, Gray = 1, RGB = 3}; // Hack: item ordinal means bytes per pixel.
+    enum RawFormat { Undefined, Gray, RGB};
 
     class Program
     {
@@ -19,12 +19,13 @@ namespace ImageDecoder
         {
             public RawFormat Raw;
             public PixelFormat Pixel;
+            public int BytesPerPixel;
         }
 
         static readonly FormatLink[] Formats = new[]
         {
-            new FormatLink { Raw = RawFormat.Gray, Pixel = PixelFormat.Format8bppIndexed},
-            new FormatLink { Raw = RawFormat.RGB,  Pixel = PixelFormat.Format24bppRgb}
+            new FormatLink { Raw = RawFormat.Gray, BytesPerPixel = 1, Pixel = PixelFormat.Format8bppIndexed},
+            new FormatLink { Raw = RawFormat.RGB,  BytesPerPixel = 3, Pixel = PixelFormat.Format24bppRgb}
         };
 
         static int Main(string[] args)
@@ -55,22 +56,20 @@ namespace ImageDecoder
         static string DecodeFile(string fileName)
         {
             Size size;
-            RawFormat format;
+            FormatLink link;
             byte[] bytes;
             using (var bmp = (Bitmap)Image.FromFile(fileName))
             {
-                var link = Formats.FirstOrDefault(fl => fl.Pixel == bmp.PixelFormat)
+                link = Formats.FirstOrDefault(fl => fl.Pixel == bmp.PixelFormat)
                     ?? throw new FormatException($"File {fileName} has unsupported pixel format {bmp.PixelFormat}.");
-                format = link.Raw;
-                bytes = Decode(bmp, format, out size);
+                bytes = Decode(bmp, link, out size);
             }
-            return SaveBitmap(fileName, format, size, bytes);
+            return SaveBitmap(fileName, link.Raw, size, bytes);
         }
 
-        static byte[] Decode(Bitmap bmp, RawFormat format, out Size size)
+        static byte[] Decode(Bitmap bmp, FormatLink link, out Size size)
         {
-            int bytesPerPixel = (int)format; // hack
-            int lineBytes = bytesPerPixel * bmp.Width;
+            int lineBytes = link.BytesPerPixel * bmp.Width;
             byte[] data = new byte[bmp.Height * lineBytes];
 
             size = new Size(bmp.Width, bmp.Height);
@@ -120,8 +119,7 @@ namespace ImageDecoder
 
         private static Bitmap Encode(byte[] data, int width, int height, FormatLink link)
         {
-            int bytesPerPixel = (int)link.Raw;  // hack: RawFormat int is bytes per pixel
-            int lineBytes = bytesPerPixel * width;
+            int lineBytes = link.BytesPerPixel * width;
             if (data.Length != height * lineBytes)
                 throw new FormatException($"Wrong raw file size {data.Length}, should be {height * lineBytes} bytes.");
 
