@@ -6,6 +6,7 @@ using System.IO;
 using System.Linq;
 using System.Runtime.InteropServices;
 using System.Text;
+using System.Text.RegularExpressions;
 using System.Threading.Tasks;
 
 namespace ImageDecoder
@@ -14,25 +15,40 @@ namespace ImageDecoder
 
     class Program
     {
+        class FormatLink
+        {
+            public RawFormat Raw;
+            public PixelFormat Pixel;
+        }
+
+        static readonly FormatLink[] Formats = new[]
+        {
+            new FormatLink { Raw = RawFormat.Gray, Pixel = PixelFormat.Format8bppIndexed},
+            new FormatLink { Raw = RawFormat.RGB,  Pixel = PixelFormat.Format24bppRgb}
+        };
+
         static int Main(string[] args)
         {
             if (args.Length == 0)
             {
                 Console.WriteLine("Usage: ImageDecoder <image_file>");
-                //Console.WriteLine("   or: ImageDecoder -e <raw_file>");
+                Console.WriteLine("   or: ImageDecoder <raw_file>");
                 return 0;
             }
             string inputFileName = args[0], outputFileName = null;
+            bool encode = Path.GetExtension(inputFileName).ToLowerInvariant() == ".raw";
             try
             {
-                outputFileName = DecodeFile(inputFileName);
+                outputFileName = encode ?
+                    EncodeFile(inputFileName) //, true) // for jpeg
+                    : DecodeFile(inputFileName);
             }
             catch (Exception e)
             {
                 Console.Error.WriteLine(e);
                 return 1;
             }
-            Console.WriteLine($"Decoded {inputFileName} into {outputFileName} successfully.");
+            Console.WriteLine($"{(encode ? "En" : "De")}coded \"{inputFileName}\" into \"{outputFileName}\" successfully.");
             return 0;
         }
 
@@ -43,17 +59,9 @@ namespace ImageDecoder
             byte[] bytes;
             using (var bmp = (Bitmap)Image.FromFile(fileName))
             {
-                switch (bmp.PixelFormat)
-                {
-                    case PixelFormat.Format8bppIndexed:
-                        format = RawFormat.Gray;
-                        break;
-                    case PixelFormat.Format24bppRgb:
-                        format = RawFormat.RGB;
-                        break;
-                    default:
-                        throw new FormatException($"File {fileName} has unknown format");
-                }
+                var link = Formats.FirstOrDefault(fl => fl.Pixel == bmp.PixelFormat)
+                    ?? throw new FormatException($"File {fileName} has unsupported pixel format {bmp.PixelFormat}.");
+                format = link.Raw;
                 bytes = Decode(bmp, format, out size);
             }
             return SaveBitmap(fileName, format, size, bytes);
@@ -87,6 +95,61 @@ namespace ImageDecoder
             string rawName = Path.ChangeExtension(origName, $"{format}-{size.Width}x{size.Height}.raw");
             File.WriteAllBytes(rawName, data);
             return rawName;
+        }
+
+        static string EncodeFile(string fileName, bool toJpeg = false)
+        {
+            var m = Regex.Match(fileName, @"^(.+)\.(\w+)-(\d+)x(\d+)\.raw$");
+            if (!m.Success
+                || !Enum.TryParse<RawFormat>(m.Groups[2].Value, true, out var format)
+                || !int.TryParse(m.Groups[3].Value, out int width)
+                || !int.TryParse(m.Groups[4].Value, out int height)
+               )
+                throw new FormatException($"Input raw file name {fileName} has wrong format.");
+            string oext = toJpeg ? "jpg" : "png";
+            string oname = m.Groups[1].Value + "." + oext;
+            var link = Formats.FirstOrDefault(fl => fl.Raw == format)
+                ?? throw new FormatException($"Raw file {fileName} has unsupported format {format}.");
+            var bytes = File.ReadAllBytes(fileName);
+            using (var bmp = Encode(bytes, width, height, link))
+            {
+                bmp.Save(oname, toJpeg ? ImageFormat.Jpeg : ImageFormat.Png);
+            }
+            return oname;
+        }
+
+        private static Bitmap Encode(byte[] data, int width, int height, FormatLink link)
+        {
+            int bytesPerPixel = (int)link.Raw;  // hack: RawFormat int is bytes per pixel
+            int lineBytes = bytesPerPixel * width;
+            if (data.Length != height * lineBytes)
+                throw new FormatException($"Wrong raw file size {data.Length}, should be {height * lineBytes} bytes.");
+
+            var bmp = new Bitmap(width, height, link.Pixel);
+            var rect = new Rectangle(Point.Empty, new Size(width, height));
+            var bd = bmp.LockBits(rect, ImageLockMode.WriteOnly, link.Pixel);
+
+            IntPtr ptr = bd.Scan0;
+            int bytesCopied = 0;
+            for (int y = 0; y < bmp.Height; y++)
+            {
+                Marshal.Copy(data, bytesCopied, ptr, lineBytes);
+                ptr += bd.Stride;
+                bytesCopied += lineBytes;
+            }
+            bmp.UnlockBits(bd);
+
+            if (link.Raw == RawFormat.Gray)
+            {
+                var colorPalette = bmp.Palette;
+                for (int i = 0; i < 256; i++)
+                {
+                    colorPalette.Entries[i] = Color.FromArgb(i, i, i);
+                }
+                bmp.Palette = colorPalette;
+            }
+
+            return bmp;
         }
     }
 }
