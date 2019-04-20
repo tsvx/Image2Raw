@@ -9,7 +9,7 @@ using System.Text;
 using System.Text.RegularExpressions;
 using System.Threading.Tasks;
 
-namespace ImageDecoder
+namespace Image2Raw
 {
     enum RawFormat { Undefined, Gray, RGB};
 
@@ -32,8 +32,8 @@ namespace ImageDecoder
         {
             if (args.Length == 0)
             {
-                Console.WriteLine("Usage: ImageDecoder <image_file>");
-                Console.WriteLine("   or: ImageDecoder <raw_file>");
+                Console.WriteLine("Usage: Image2Raw <image_file>");
+                Console.WriteLine("   or: Image2Raw <raw_file>");
                 return 0;
             }
             string inputFileName = args[0], outputFileName = null;
